@@ -6,7 +6,7 @@ pool:
 
 variables:
   dockerHubServiceConnection: 'docker-hub-connection'  
-  dockerImageName: 'devops1renad/auth_app_backend_image' 
+  dockerImageName: 'shadaxxx/auth_app_backend_image' 
 
 stages:
 - stage: Build_and_Deploy_Backend
