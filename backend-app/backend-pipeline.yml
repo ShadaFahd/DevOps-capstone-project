@@ -1,0 +1,43 @@
+trigger:
+  - main  
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  dockerHubServiceConnection: 'docker-hub-connection'  
+  dockerImageName: 'devops1renad/auth_app_backend_image' 
+
+stages:
+- stage: Build_and_Deploy_Backend
+  jobs:
+  - job: BuildPushDeploy
+    steps:
+
+    - checkout: self
+
+    - task: Docker@2
+      displayName: 'Build Backend Docker Image'
+      inputs:
+        containerRegistry: $(dockerHubServiceConnection)
+        repository: $(dockerImageName)
+        command: buildAndPush
+        Dockerfile: 'Dockerfile'
+        tags: latest
+
+    - task: AzureCLI@2
+      displayName: 'Get AKS credentials'
+      inputs:
+        azureSubscription: 'AzureRMServiceConnection'  # ←  Azure service connection
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group devops1-capstone-queens-rg --name devops1-capstone-queens-aks-cluster --admin
+
+    - script: |
+        echo "Applying Kubernetes backend resources..."
+        kubectl apply -f kubernetes/namespace.yml
+        kubectl apply -f kubernetes/backend_deploy.yml
+        kubectl apply -f kubernetes/backend_clusterip.yml
+        kubectl apply -f kubernetes/backend_ingress.yml
+      displayName: 'Deploy Backend to AKS'

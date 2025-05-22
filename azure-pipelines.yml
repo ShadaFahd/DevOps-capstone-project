@@ -1,0 +1,94 @@
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: Terraform_Infra
+  displayName: 'Deploy Infrastructure with Terraform'
+  jobs:
+  - job: Terraform
+    displayName: 'Terraform Init, Plan, Apply'
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: 'AzureRMServiceConnection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Azure CLI login succeeded."
+
+    - script: |
+        echo "Installing Terraform..."
+        sudo apt-get update
+        sudo apt-get install -y wget unzip
+        wget https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
+        unzip terraform_1.5.7_linux_amd64.zip
+        sudo mv terraform /usr/local/bin/
+        terraform -version
+      displayName: 'Install Terraform'
+
+    - script: |
+        echo "Running terraform init with reconfigure..."
+        cd Terraform/solution
+        terraform init -reconfigure \
+          -backend-config="resource_group_name=devops1-capstone-queens-rg" \
+          -backend-config="storage_account_name=devops1queensstorage" \
+          -backend-config="container_name=tfstate" \
+          -backend-config="key=terraform.tfstate"
+      displayName: 'Terraform Init'
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
+
+    - script: |
+        echo "Running terraform plan..."
+        cd Terraform/solution
+        chmod -R +x .terraform
+        terraform plan
+      displayName: 'Terraform Plan'
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
+
+    - script: |
+        echo "Running terraform apply..."
+        cd Terraform/solution
+        chmod -R +x .terraform
+        terraform apply -auto-approve
+      displayName: 'Terraform Apply'
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
+
+    - task: AzureCLI@2
+      displayName: 'Install Prometheus and Grafana on AKS'
+      inputs:
+        azureSubscription: 'AzureRMServiceConnection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Installing Prometheus and Grafana..."
+
+          az aks get-credentials --resource-group devops1-capstone-queens-rg --name devops1-capstone-queens-aks-cluster --admin
+
+          echo "Installing Helm..."
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+
+          kubectl create namespace monitoring || true
+
+          helm install prometheus prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --set grafana.service.type=LoadBalancer

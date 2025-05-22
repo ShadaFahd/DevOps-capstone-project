@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+ name: frontend-configmap
+ namespace: trainer-portal
+data:
+ config.json: |
+   {
+     "API_URL": "http://128.203.73.0/backend/"
+   }

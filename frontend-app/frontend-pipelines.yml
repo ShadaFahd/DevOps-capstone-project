@@ -1,0 +1,45 @@
+trigger:
+  - main  # أو اسم الفرع الذي تستخدمينه
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  dockerHubServiceConnection: 'docker-hub-connection'  # ← اسم Docker Hub service connection
+  dockerImageName: 'devops1renad/auth_app_frontend_image'  # ← غيّريه حسب Docker Hub repo
+
+stages:
+- stage: Build_and_Deploy_Frontend
+  jobs:
+  - job: BuildPushApply
+    steps:
+
+    - checkout: self
+
+    - task: Docker@2
+      displayName: 'Build Frontend Docker Image'
+      inputs:
+        containerRegistry: $(dockerHubServiceConnection)
+        repository: $(dockerImageName)
+        command: buildAndPush
+        Dockerfile: 'Dockerfile'
+        tags: latest
+        buildContext: 'ui'
+
+    - task: AzureCLI@2
+      displayName: 'Get AKS credentials'
+      inputs:
+        azureSubscription: 'AzureRMServiceConnection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group devops1-capstone-queens-rg --name devops1-capstone-queens-aks-cluster --admin
+
+    - script: |
+        echo "Deploying Frontend K8s Resources..."
+        kubectl apply -f kubernetes/namespace.yml
+        kubectl apply -f kubernetes/config_map.yml
+        kubectl apply -f kubernetes/frontend_deploy.yml
+        kubectl apply -f kubernetes/frontend_clusterip.yml
+        kubectl apply -f kubernetes/frontend_ingress.yml
+      displayName: 'Apply Frontend Kubernetes Manifests'
